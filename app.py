@@ -38,7 +38,7 @@ with tab1:
 
     st.subheader("🔧 Single Campaign Setup")
 
-    total_budget = st.number_input("Total Budget for This Campaign ($)", min_value=1000, value=5000, step=500)
+    total_budget = st.number_input("Total Budget for This Campaign ($)", min_value=0, value=0, step=500)
     goal = st.selectbox("Campaign Goal", list(goal_to_funnel.keys()))
     audience = st.selectbox("Audience Type", ["B2B", "B2C"])
     selected_platform = st.selectbox("Which platform will this campaign run on?", platform_options)
@@ -51,7 +51,7 @@ with tab1:
     if goal == "Sales" and selected_platform == "Reddit Ads":
         st.info("Reddit Ads is not commonly used for direct sales.")
 
-    if st.button("🚀 Run Allocation"):
+    if st.button("🚀 Run Allocation", key="single_run"):
         try:
             results = calculate_allocations(
                 total_budget=total_budget,
@@ -69,8 +69,8 @@ with tab1:
                     st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
                     if "notes" in res:
                         st.caption(res["notes"])
-        except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
+        except TypeError:
+            st.error("Backend error: The 'allowed_platforms' parameter is not supported. Please check the logic file.")
 
 # =============================
 # TAB 2: MULTI-CAMPAIGN
@@ -80,12 +80,9 @@ with tab2:
 
     st.subheader("🧩 Multi-Campaign Setup")
 
-    total_multi_budget = st.number_input("Total Budget for All Campaigns ($)", min_value=2000, value=10000, step=500)
+    total_multi_budget = st.number_input("Total Budget for All Campaigns ($)", min_value=0, value=0, step=500)
     available_platforms = st.multiselect("Which platforms are available for your campaigns?", platform_options)
     recommend_platforms = st.checkbox("🧠 Recommend best-fit platforms for each campaign?")
-
-    if not available_platforms:
-        st.warning("Please select at least one platform to continue.")
 
     num_campaigns = st.slider("Number of Campaigns", 2, 5, 2)
 
@@ -106,7 +103,7 @@ with tab2:
 
         campaign_configs.append({"goal": g, "audience": a, "platform": p})
 
-    if st.button("📊 Run Multi-Campaign Allocation"):
+    if st.button("📊 Run Multi-Campaign Allocation", key="multi_run"):
         total_weight = sum(goal_weights[c["goal"]] for c in campaign_configs)
 
         for idx, campaign in enumerate(campaign_configs):
@@ -132,7 +129,7 @@ with tab2:
 
             st.markdown(f"### 🎯 Campaign {idx+1}: {goal} ({audience})")
             st.markdown(f"**Assigned Platform:** {best_platform}")
-            st.markdown(f"**Budget:** ${allocated_budget:,.2f} | Funnel: {funnel}")
+            st.markdown(f"**Budget:** ${allocated_budget:,.2f} | Funnel: {funnel} | Share: {round(budget_share * 100, 1)}%")
 
             try:
                 results = calculate_allocations(
@@ -149,8 +146,8 @@ with tab2:
                     for res in results:
                         st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
                     st.markdown("---")
-            except Exception as e:
-                st.error(f"An error occurred during allocation: {str(e)}")
+            except TypeError:
+                st.error("Backend error: The 'allowed_platforms' parameter is not supported. Please check the logic file.")
 
 # =============================
 # SIDEBAR: DYNAMIC SUMMARY
