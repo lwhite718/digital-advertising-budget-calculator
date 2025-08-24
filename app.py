@@ -1,5 +1,6 @@
 import streamlit as st
 from budget_allocator import calculate_allocations
+from channel_config import channel_scores
 
 # --- Goal-to-Funnel Mapping ---
 goal_to_funnel = {
@@ -51,22 +52,25 @@ with tab1:
         st.info("Reddit Ads is not commonly used for direct sales.")
 
     if st.button("🚀 Run Allocation"):
-        results = calculate_allocations(
-            total_budget=total_budget,
-            goal=goal,
-            funnel=funnel,
-            audience=audience,
-            allowed_platforms=[selected_platform]
-        )
+        try:
+            results = calculate_allocations(
+                total_budget=total_budget,
+                goal=goal,
+                funnel=funnel,
+                audience=audience,
+                allowed_platforms=[selected_platform]
+            )
 
-        if "error" in results:
-            st.error(results["error"])
-        else:
-            st.subheader("📊 Budget Breakdown")
-            for res in results:
-                st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
-                if "notes" in res:
-                    st.caption(res["notes"])
+            if "error" in results:
+                st.error(results["error"])
+            else:
+                st.subheader("📊 Budget Breakdown")
+                for res in results:
+                    st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
+                    if "notes" in res:
+                        st.caption(res["notes"])
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
 
 # =============================
 # TAB 2: MULTI-CAMPAIGN
@@ -77,8 +81,11 @@ with tab2:
     st.subheader("🧩 Multi-Campaign Setup")
 
     total_multi_budget = st.number_input("Total Budget for All Campaigns ($)", min_value=2000, value=10000, step=500)
-    available_platforms = st.multiselect("Which platforms are available for your campaigns?", platform_options, default=platform_options)
-    recommend_platforms = st.checkbox("🧠 Recommend best-fit platforms for each campaign?", value=True)
+    available_platforms = st.multiselect("Which platforms are available for your campaigns?", platform_options)
+    recommend_platforms = st.checkbox("🧠 Recommend best-fit platforms for each campaign?")
+
+    if not available_platforms:
+        st.warning("Please select at least one platform to continue.")
 
     num_campaigns = st.slider("Number of Campaigns", 2, 5, 2)
 
@@ -91,11 +98,11 @@ with tab2:
         with col2:
             a = st.selectbox(f"Audience {i+1}", ["B2B", "B2C"], key=f"aud_{i}")
 
-        if not recommend_platforms:
+        if not recommend_platforms and available_platforms:
             with st.expander(f"Select Platform for Campaign {i+1}"):
                 p = st.selectbox(f"Platform", available_platforms, key=f"plat_{i}")
         else:
-            p = None  # Will be auto-assigned later
+            p = None
 
         campaign_configs.append({"goal": g, "audience": a, "platform": p})
 
@@ -110,39 +117,40 @@ with tab2:
             allocated_budget = round(total_multi_budget * budget_share, 2)
             funnel = goal_to_funnel[goal]
 
-            if recommend_platforms:
-                # Pick highest scoring platform from allowed list
+            if recommend_platforms and available_platforms:
                 scored = []
                 for p in available_platforms:
-                    from channel_config import channel_scores
                     base = channel_scores[p]["base_scores"].get(goal, 0)
                     aud_mod = channel_scores[p]["modifiers"].get(audience, 0)
                     fun_mod = channel_scores[p]["modifiers"].get(funnel, 0)
                     score = base + aud_mod + fun_mod
                     scored.append((p, score))
-                scored.sort(key=lambda x: x[1], reverse=True)
+                scored = [x for x in scored if x[1] > 0]
                 best_platform = scored[0][0] if scored else available_platforms[0]
             else:
-                best_platform = campaign["platform"]
+                best_platform = campaign["platform"] if campaign["platform"] else "Unknown"
 
             st.markdown(f"### 🎯 Campaign {idx+1}: {goal} ({audience})")
             st.markdown(f"**Assigned Platform:** {best_platform}")
             st.markdown(f"**Budget:** ${allocated_budget:,.2f} | Funnel: {funnel}")
 
-            results = calculate_allocations(
-                total_budget=allocated_budget,
-                goal=goal,
-                funnel=funnel,
-                audience=audience,
-                allowed_platforms=[best_platform]
-            )
+            try:
+                results = calculate_allocations(
+                    total_budget=allocated_budget,
+                    goal=goal,
+                    funnel=funnel,
+                    audience=audience,
+                    allowed_platforms=[best_platform]
+                )
 
-            if "error" in results:
-                st.error(results["error"])
-            else:
-                for res in results:
-                    st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
-                st.markdown("---")
+                if "error" in results:
+                    st.error(results["error"])
+                else:
+                    for res in results:
+                        st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
+                    st.markdown("---")
+            except Exception as e:
+                st.error(f"An error occurred during allocation: {str(e)}")
 
 # =============================
 # SIDEBAR: DYNAMIC SUMMARY
@@ -161,6 +169,9 @@ elif st.session_state.active_tab == "multi":
     st.sidebar.markdown("**Multi-Campaign Summary**")
     st.sidebar.write(f"Campaigns: {num_campaigns}")
     st.sidebar.write(f"Total Budget: ${total_multi_budget:,.2f}")
-    st.sidebar.write("Selected Platforms:")
-    for p in available_platforms:
-        st.sidebar.write(f"• {p}")
+    if available_platforms:
+        st.sidebar.write("Selected Platforms:")
+        for p in available_platforms:
+            st.sidebar.write(f"• {p}")
+    else:
+        st.sidebar.write("No platforms selected.")
