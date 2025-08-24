@@ -24,6 +24,9 @@ platform_options = ["Google Ads", "Meta Ads", "LinkedIn Ads", "Reddit Ads", "Tik
 st.set_page_config(page_title="Marketing Budget Allocator", layout="centered")
 st.title("🧮 Marketing Budget Allocator")
 
+# --- Track which tab is active for sidebar context
+active_tab = st.session_state.get("active_tab", "single")
+
 # --- TABS ---
 tab1, tab2 = st.tabs(["📈 Single Campaign", "🧩 Multi-Campaign Allocation"])
 
@@ -32,6 +35,7 @@ tab1, tab2 = st.tabs(["📈 Single Campaign", "🧩 Multi-Campaign Allocation"])
 # =============================
 with tab1:
     st.session_state.active_tab = "single"
+    active_tab = "single"
 
     st.subheader("🔧 Single Campaign Setup")
 
@@ -74,6 +78,7 @@ with tab1:
 # =============================
 with tab2:
     st.session_state.active_tab = "multi"
+    active_tab = "multi"
 
     st.subheader("🧩 Multi-Campaign Setup")
 
@@ -115,16 +120,18 @@ with tab2:
             allocated_budget = round(total_multi_budget * budget_share, 2)
             funnel = goal_to_funnel[goal]
 
-            if recommend_platforms and available_platforms:
+            platforms_to_score = available_platforms if available_platforms else platform_options
+
+            if recommend_platforms:
                 scored = []
-                for p in available_platforms:
+                for p in platforms_to_score:
                     base = channel_scores[p]["base_scores"].get(goal, 0)
                     aud_mod = channel_scores[p]["modifiers"].get(audience, 0)
                     fun_mod = channel_scores[p]["modifiers"].get(funnel, 0)
                     score = base + aud_mod + fun_mod
                     scored.append((p, score))
                 scored = [x for x in scored if x[1] > 0]
-                best_platform = scored[0][0] if scored else available_platforms[0]
+                best_platform = scored[0][0] if scored else platform_options[0]
             else:
                 best_platform = campaign["platform"] if campaign["platform"] else "Unknown"
 
@@ -155,7 +162,7 @@ with tab2:
 # =============================
 st.sidebar.title("📋 Campaign Summary")
 
-if st.session_state.get("active_tab") == "single":
+if active_tab == "single":
     st.sidebar.markdown("**Single Campaign Summary**")
     st.sidebar.write(f"Goal: {goal}")
     st.sidebar.write(f"Funnel: {funnel}")
@@ -163,7 +170,7 @@ if st.session_state.get("active_tab") == "single":
     st.sidebar.write(f"Platform: {selected_platform}")
     st.sidebar.write(f"Budget: ${total_budget:,.2f}")
 
-elif st.session_state.get("active_tab") == "multi":
+elif active_tab == "multi":
     st.sidebar.markdown("**Multi-Campaign Summary**")
     st.sidebar.write(f"Campaigns: {num_campaigns}")
     st.sidebar.write(f"Total Budget: ${total_multi_budget:,.2f}")
@@ -171,3 +178,5 @@ elif st.session_state.get("active_tab") == "multi":
         st.sidebar.write("Selected Platforms:")
         for p in available_platforms:
             st.sidebar.write(f"• {p}")
+    else:
+        st.sidebar.write("No platforms selected. Using full list.")
