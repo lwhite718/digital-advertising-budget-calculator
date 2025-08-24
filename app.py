@@ -27,9 +27,6 @@ st.title("🧮 Marketing Budget Allocator")
 # --- TABS ---
 tab1, tab2 = st.tabs(["📈 Single Campaign", "🧩 Multi-Campaign Allocation"])
 
-if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "single"
-
 # =============================
 # TAB 1: SINGLE CAMPAIGN
 # =============================
@@ -69,8 +66,8 @@ with tab1:
                     st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
                     if "notes" in res:
                         st.caption(res["notes"])
-        except TypeError:
-            st.error("Backend error: The 'allowed_platforms' parameter is not supported. Please check the logic file.")
+        except Exception as e:
+            st.error(f"Backend error: {e}")
 
 # =============================
 # TAB 2: MULTI-CAMPAIGN
@@ -95,9 +92,13 @@ with tab2:
         with col2:
             a = st.selectbox(f"Audience {i+1}", ["B2B", "B2C"], key=f"aud_{i}")
 
-        if not recommend_platforms and available_platforms:
-            with st.expander(f"Select Platform for Campaign {i+1}"):
-                p = st.selectbox(f"Platform", available_platforms, key=f"plat_{i}")
+        if not recommend_platforms:
+            if available_platforms:
+                with st.expander(f"Select Platform for Campaign {i+1}"):
+                    p = st.selectbox(f"Platform", available_platforms, key=f"plat_{i}")
+            else:
+                st.warning("Please select at least one platform to continue.")
+                p = None
         else:
             p = None
 
@@ -146,15 +147,15 @@ with tab2:
                     for res in results:
                         st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
                     st.markdown("---")
-            except TypeError:
-                st.error("Backend error: The 'allowed_platforms' parameter is not supported. Please check the logic file.")
+            except Exception as e:
+                st.error(f"Backend error: {e}")
 
 # =============================
 # SIDEBAR: DYNAMIC SUMMARY
 # =============================
 st.sidebar.title("📋 Campaign Summary")
 
-if st.session_state.active_tab == "single":
+if st.session_state.get("active_tab") == "single":
     st.sidebar.markdown("**Single Campaign Summary**")
     st.sidebar.write(f"Goal: {goal}")
     st.sidebar.write(f"Funnel: {funnel}")
@@ -162,7 +163,7 @@ if st.session_state.active_tab == "single":
     st.sidebar.write(f"Platform: {selected_platform}")
     st.sidebar.write(f"Budget: ${total_budget:,.2f}")
 
-elif st.session_state.active_tab == "multi":
+elif st.session_state.get("active_tab") == "multi":
     st.sidebar.markdown("**Multi-Campaign Summary**")
     st.sidebar.write(f"Campaigns: {num_campaigns}")
     st.sidebar.write(f"Total Budget: ${total_multi_budget:,.2f}")
@@ -170,5 +171,3 @@ elif st.session_state.active_tab == "multi":
         st.sidebar.write("Selected Platforms:")
         for p in available_platforms:
             st.sidebar.write(f"• {p}")
-    else:
-        st.sidebar.write("No platforms selected.")
