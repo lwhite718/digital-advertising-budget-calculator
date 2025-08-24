@@ -16,20 +16,31 @@ funnel_options = ["TOFU", "MOFU", "BOFU"]
 audience_options = ["B2B", "B2C"]
 
 col1, col2 = st.columns(2)
+
 with col1:
     funnel = st.selectbox("Funnel Focus", funnel_options)
+
 with col2:
-    # Disable Engagement unless TOFU is selected
+    # Only show Engagement if TOFU is selected
     if funnel != "TOFU":
         goal_options_display = [g for g in goal_options if g != "Engagement"]
     else:
         goal_options_display = goal_options
+
     goal = st.selectbox("Marketing Goal", goal_options_display)
 
 audience = st.selectbox("Audience Type", audience_options)
 retargeting_enabled = st.checkbox("Include retargeting allocation (Google Display)")
 
-# --- ALLOCATE BUTTON ---
+# --- DEBUG PANEL ---
+st.sidebar.title("🔍 Debug Panel")
+st.sidebar.write(f"Goal: {goal}")
+st.sidebar.write(f"Funnel: {funnel}")
+st.sidebar.write(f"Audience: {audience}")
+st.sidebar.write(f"Retargeting: {retargeting_enabled}")
+st.sidebar.write(f"Total Budget: ${total_budget}")
+
+# --- ALLOCATION CALC ---
 if st.button("🚀 Calculate Allocation"):
     results = calculate_allocations(
         total_budget=total_budget,
@@ -46,6 +57,6 @@ if st.button("🚀 Calculate Allocation"):
         st.markdown(f"**Total Budget:** ${total_budget:,.2f}")
 
         for res in results:
-            st.write(f"**{res['platform']}** — {res['percent']}% (${res['budget']})")
+            st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
             if "notes" in res:
                 st.caption(res["notes"])
