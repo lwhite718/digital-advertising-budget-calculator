@@ -21,9 +21,7 @@ goal_weights = {
 platform_options = ["Google Ads", "Meta Ads", "LinkedIn Ads", "Reddit Ads", "TikTok Ads"]
 
 st.set_page_config(page_title="Marketing Budget Allocator", layout="centered")
-
 st.title("🧮 Marketing Budget Allocator")
-st.markdown("Use this tool to intelligently split your ad budget across platforms and campaign types.")
 
 # --- TABS ---
 tab1, tab2 = st.tabs(["📈 Single Campaign", "🧩 Multi-Campaign Allocation"])
@@ -37,52 +35,34 @@ if "active_tab" not in st.session_state:
 with tab1:
     st.session_state.active_tab = "single"
 
-    st.subheader("🔧 Campaign Inputs")
+    st.subheader("🔧 Single Campaign Setup")
 
-    total_budget = st.number_input("Total Ad Budget ($)", min_value=1000, value=5000, step=500)
-
-    goal_options = list(goal_to_funnel.keys())
-    audience_options = ["B2B", "B2C"]
-
-    col1, col2 = st.columns(2)
-    with col1:
-        goal = st.selectbox("Marketing Goal", goal_options)
-    with col2:
-        audience = st.selectbox("Audience Type", audience_options)
-
-    selected_platforms = st.multiselect(
-        "Select Platforms to Include",
-        platform_options,
-        default=platform_options
-    )
+    total_budget = st.number_input("Total Budget for This Campaign ($)", min_value=1000, value=5000, step=500)
+    goal = st.selectbox("Campaign Goal", list(goal_to_funnel.keys()))
+    audience = st.selectbox("Audience Type", ["B2B", "B2C"])
+    selected_platform = st.selectbox("Which platform will this campaign run on?", platform_options)
 
     funnel = goal_to_funnel.get(goal, "TOFU")
 
-    # --- Feedback Section ---
-    st.subheader("💡 Channel Fit Suggestions")
+    st.subheader("💡 Platform Fit Feedback")
+    if audience == "B2B" and selected_platform == "TikTok Ads":
+        st.warning("TikTok Ads is generally not effective for B2B campaigns.")
+    if goal == "Sales" and selected_platform == "Reddit Ads":
+        st.info("Reddit Ads is not commonly used for direct sales.")
 
-    for p in selected_platforms:
-        if audience == "B2B" and p == "TikTok Ads":
-            st.warning(f"{p} is generally not effective for B2B. You may want to reconsider.")
-        if goal == "Sales" and p == "Reddit Ads":
-            st.info(f"{p} can be weak for direct sales. Consider pairing with search or retargeting.")
-
-    # --- Calculate ---
-    if st.button("🚀 Calculate Allocation"):
+    if st.button("🚀 Run Allocation"):
         results = calculate_allocations(
             total_budget=total_budget,
             goal=goal,
             funnel=funnel,
             audience=audience,
-            allowed_platforms=selected_platforms
+            allowed_platforms=[selected_platform]
         )
 
         if "error" in results:
             st.error(results["error"])
         else:
             st.subheader("📊 Budget Breakdown")
-            st.markdown(f"**Total Budget:** ${total_budget:,.2f}")
-
             for res in results:
                 st.write(f"**{res['platform']}** — {res['percent']}% → ${res['budget']:,.2f}")
                 if "notes" in res:
@@ -94,49 +74,67 @@ with tab1:
 with tab2:
     st.session_state.active_tab = "multi"
 
-    st.subheader("🧪 Multi-Campaign Allocation (Auto Budget)")
+    st.subheader("🧩 Multi-Campaign Setup")
 
     total_multi_budget = st.number_input("Total Budget for All Campaigns ($)", min_value=2000, value=10000, step=500)
+    available_platforms = st.multiselect("Which platforms are available for your campaigns?", platform_options, default=platform_options)
+    recommend_platforms = st.checkbox("🧠 Recommend best-fit platforms for each campaign?", value=True)
 
-    num_campaigns = st.slider("How many campaigns?", 2, 5, 2)
+    num_campaigns = st.slider("Number of Campaigns", 2, 5, 2)
 
-    goal_options = list(goal_to_funnel.keys())
-    audience_options = ["B2B", "B2C"]
-    multi_inputs = []
-
+    campaign_configs = []
     for i in range(num_campaigns):
         st.markdown(f"#### Campaign {i+1}")
         col1, col2 = st.columns(2)
         with col1:
-            g = st.selectbox(f"Goal {i+1}", goal_options, key=f"goal_{i}")
+            g = st.selectbox(f"Goal {i+1}", list(goal_to_funnel.keys()), key=f"goal_{i}")
         with col2:
-            a = st.selectbox(f"Audience {i+1}", audience_options, key=f"aud_{i}")
-        with st.expander(f"Channels for Campaign {i+1}"):
-            selected = st.multiselect(f"Select Platforms", platform_options, default=platform_options, key=f"plat_{i}")
-        multi_inputs.append({
-            "goal": g,
-            "audience": a,
-            "platforms": selected
-        })
+            a = st.selectbox(f"Audience {i+1}", ["B2B", "B2C"], key=f"aud_{i}")
+
+        if not recommend_platforms:
+            with st.expander(f"Select Platform for Campaign {i+1}"):
+                p = st.selectbox(f"Platform", available_platforms, key=f"plat_{i}")
+        else:
+            p = None  # Will be auto-assigned later
+
+        campaign_configs.append({"goal": g, "audience": a, "platform": p})
 
     if st.button("📊 Run Multi-Campaign Allocation"):
-        total_weight = sum(goal_weights[c["goal"]] for c in multi_inputs)
+        total_weight = sum(goal_weights[c["goal"]] for c in campaign_configs)
 
-        for idx, campaign in enumerate(multi_inputs):
-            weight = goal_weights[campaign["goal"]]
-            budget_share = (weight / total_weight)
+        for idx, campaign in enumerate(campaign_configs):
+            goal = campaign["goal"]
+            audience = campaign["audience"]
+            weight = goal_weights[goal]
+            budget_share = weight / total_weight
             allocated_budget = round(total_multi_budget * budget_share, 2)
-            funnel = goal_to_funnel.get(campaign["goal"], "TOFU")
+            funnel = goal_to_funnel[goal]
 
-            st.markdown(f"### 🎯 Campaign {idx+1}: {campaign['goal']} ({campaign['audience']})")
+            if recommend_platforms:
+                # Pick highest scoring platform from allowed list
+                scored = []
+                for p in available_platforms:
+                    from channel_config import channel_scores
+                    base = channel_scores[p]["base_scores"].get(goal, 0)
+                    aud_mod = channel_scores[p]["modifiers"].get(audience, 0)
+                    fun_mod = channel_scores[p]["modifiers"].get(funnel, 0)
+                    score = base + aud_mod + fun_mod
+                    scored.append((p, score))
+                scored.sort(key=lambda x: x[1], reverse=True)
+                best_platform = scored[0][0] if scored else available_platforms[0]
+            else:
+                best_platform = campaign["platform"]
+
+            st.markdown(f"### 🎯 Campaign {idx+1}: {goal} ({audience})")
+            st.markdown(f"**Assigned Platform:** {best_platform}")
             st.markdown(f"**Budget:** ${allocated_budget:,.2f} | Funnel: {funnel}")
 
             results = calculate_allocations(
                 total_budget=allocated_budget,
-                goal=campaign["goal"],
+                goal=goal,
                 funnel=funnel,
-                audience=campaign["audience"],
-                allowed_platforms=campaign["platforms"]
+                audience=audience,
+                allowed_platforms=[best_platform]
             )
 
             if "error" in results:
@@ -149,17 +147,20 @@ with tab2:
 # =============================
 # SIDEBAR: DYNAMIC SUMMARY
 # =============================
-st.sidebar.title("📋 Summary")
+st.sidebar.title("📋 Campaign Summary")
 
 if st.session_state.active_tab == "single":
+    st.sidebar.markdown("**Single Campaign Summary**")
     st.sidebar.write(f"Goal: {goal}")
     st.sidebar.write(f"Funnel: {funnel}")
     st.sidebar.write(f"Audience: {audience}")
+    st.sidebar.write(f"Platform: {selected_platform}")
     st.sidebar.write(f"Budget: ${total_budget:,.2f}")
-    st.sidebar.write("Platforms:")
-    for p in selected_platforms:
-        st.sidebar.write(f"• {p}")
 
 elif st.session_state.active_tab == "multi":
+    st.sidebar.markdown("**Multi-Campaign Summary**")
     st.sidebar.write(f"Campaigns: {num_campaigns}")
     st.sidebar.write(f"Total Budget: ${total_multi_budget:,.2f}")
+    st.sidebar.write("Selected Platforms:")
+    for p in available_platforms:
+        st.sidebar.write(f"• {p}")
